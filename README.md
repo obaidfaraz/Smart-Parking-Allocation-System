@@ -560,12 +560,10 @@ Example:
 
 ```env
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/smart_parking
-
 MONGODB_URI=mongodb://localhost:27017
-
 MONGODB_DB=smart_parking_logs
-
-JWT_SECRET=YOUR_LONG_RANDOM_SECRET
+JWT_SECRET=replace-with-at-least-32-random-characters
+DATABASE_SSL=false
 ```
 
 An `.env.example` file containing placeholders should be committed to GitHub.
@@ -606,11 +604,26 @@ Create the project database:
 CREATE DATABASE smart_parking;
 ```
 
-The database schema and sample data will be loaded using the project's SQL scripts once they are implemented.
+From the project root, apply the schema, Member A's database features, the existing hardening migration and optional sample records in this order:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/advanced_features.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/002_integrity_hardening.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seed.sql
+```
+
+In PowerShell, copy `.env.example` to `.env.local`, configure `DATABASE_URL`, and then run the same `psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f <script>` command for each file above. Use the same `DATABASE_URL` in the application. Start the app and visit `/setup` to create the first administrator; setup is disabled as soon as the first staff account exists.
+
+Run the rollback-safe Member A SQL checks with:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_a_smoke.sql
+```
 
 ### Step 5: Start MongoDB
 
-Ensure MongoDB Community Server is running locally, or configure the connection string for the team's selected MongoDB deployment.
+MongoDB integration is part of Member B's audit-log responsibility. It is not required for Member A's parking, allocation, authentication and dashboard flows.
 
 ### Step 6: Run the Application
 
@@ -630,7 +643,7 @@ npm run start
 npm run lint
 ```
 
-The application requires both database services to be available for full functionality.
+Member A's application flows require PostgreSQL. MongoDB will be required once Member B's audit-log integration is merged.
 
 ---
 
@@ -837,20 +850,23 @@ AI-generated code must be reviewed, understood, tested and integrated by the tea
 
 This repository is the central development location for the Smart Parking Allocation & Violation Management System.
 
-The initial Next.js application has been initialized and pushed to GitHub.
+### Implemented in this workspace — Member A and shared foundation
 
-The remaining implementation work includes:
+- PostgreSQL connection pooling, initial administrator setup, hashed passwords and signed HTTP-only sessions.
+- Server-side role checks (`admin` and `parking_staff`), Zod request validation and parameterized queries.
+- Parking area and slot management, including capacity checks and occupancy display.
+- Driver, vehicle and historical driver-vehicle association management.
+- Transactional check-in/check-out, slot locking, event history and automatic fee calculation.
+- PostgreSQL occupancy view, allocation integrity features, seed data, query examples and a rollback-safe SQL smoke test.
+- Responsive operations dashboard and setup/login screens.
 
-- Database setup and schema implementation.
-- MongoDB integration.
-- Backend API development.
-- Frontend feature implementation.
-- Authentication and authorization.
-- Advanced DBMS features.
-- Testing and documentation.
-- Final integration and demonstration.
+### Remaining team work
 
-**Project status:** In Development
+- Member B's violation, violation-payment, parking-payment, notice and MongoDB audit-log APIs/interfaces and tests.
+- Shared end-to-end testing against the team's PostgreSQL and MongoDB installations.
+- Final ER-diagram and submission screenshots, and verification of each member's contribution history.
+
+**Project status:** Member A's core module implemented; team integration and Member B's scope remain in development.
 
 ---
 
