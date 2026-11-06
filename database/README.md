@@ -362,7 +362,20 @@ psql -h localhost -p 5433 -U postgres -d smart_parking_db_test -c "\dt"
 psql -h localhost -p 5433 -U postgres -d smart_parking_db_test -c "SELECT * FROM parking_areas;"
 ```
 
-## 13. Remaining decisions to confirm
+## 13. Member A implementation and setup
+
+Apply the core schema first, then `advanced_features.sql`, then
+`migrations/002_integrity_hardening.sql`. The advanced script adds the normalized
+`driver_phones` table, authoritative area occupancy view, slot/allocation
+synchronization triggers and `calculate_parking_fee(...)`. `seed.sql` adds
+non-production demonstration areas, drivers and vehicles.
+
+`tests/member_a_smoke.sql` verifies occupied-slot synchronization, duplicate
+allocation rejection, fee rounding and slot release. It rolls back all fixture
+data when successful. The Next.js dashboard uses the same database objects for
+its occupancy, driver, vehicle and allocation views.
+
+## 14. Remaining decisions to confirm
 
 These are still project-level decisions that should be confirmed before implementation:
 
@@ -371,6 +384,6 @@ These are still project-level decisions that should be confirmed before implemen
 3. Should a payment be allowed to settle multiple violations across different vehicles or only within the same vehicle context?
 4. Should `trigger` logic be used for any business rules beyond allocation integrity and payment validation?
 
-## 14. Final note
+## 15. Final note
 
 This schema is suitable for a college DBMS mini-project and is designed for a two-person team with clear ownership boundaries. It keeps the project understandable, consistent, and realistic while still demonstrating important database concepts.
