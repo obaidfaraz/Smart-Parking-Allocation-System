@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Smart Parking Allocation & Violation Management System
 
-## Getting Started
+This project is a DBMS assignment for a smart parking platform. It models parking areas, slot allocation, active occupancy, traffic violation enforcement, payment settlement, and automated notices.
 
-First, run the development server:
+## Team roles and responsibilities
+
+### Developer A: Parking and allocation module
+- parking_areas
+- parking_slots
+- drivers
+- vehicles
+- driver_vehicles
+- allocations
+- check_in_out_events
+- occupancy_snapshot
+
+### Member B: Violation and payment module
+- violation_types
+- violations
+- payments
+- violation_payments
+- notices
+- audit_outbox
+
+## Final business decisions
+
+1. Driver-vehicle relationships are historical and support many-to-many mappings through driver_vehicles.
+2. Violations are generated automatically after a rule is evaluated.
+3. A violation can only be created for an ACTIVE allocation.
+4. One payment can settle multiple violations through violation_payments.
+5. Notices are generated automatically for relevant events such as violation issuance, overdue fine, payment reminder, or dispute notice.
+6. Roles are restricted to admin and parking_staff.
+
+## Setup
 
 ```bash
+cd C:\Users\surya\Desktop\DBMS_miniproject
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000 in the browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Production build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd C:\Users\surya\Desktop\DBMS_miniproject
+npm run build
+```
 
-## Learn More
+## Database schema
 
-To learn more about Next.js, take a look at the following resources:
+The PostgreSQL schema is located in `database/schema.sql` and includes the table design, triggers, constraints, helper functions, and indexes for the parking and violation workflows.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Do not commit or push changes as part of this task.
+- Member B focuses on violation, payment, and notice logic, while Developer A covers parking allocation and occupancy tracking.

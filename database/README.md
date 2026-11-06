@@ -43,6 +43,7 @@ The following assumptions are documented explicitly:
 - A violation is always linked to an allocation, a slot, a vehicle, and a driver.
 - The violation snapshot fields are retained intentionally so the record remains query-friendly even if the allocation changes later.
 - Payment status and notice status are separate concepts and stored separately.
+- `notices.issued_by` is nullable so the system can issue notices without requiring a human staff user.
 - MongoDB stores audit logs; PostgreSQL remains the transactional source of truth.
 
 ## 4. ER diagram

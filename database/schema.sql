@@ -188,7 +188,7 @@ CREATE TABLE notices (
     notice_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     violation_id UUID REFERENCES violations(violation_id) ON DELETE CASCADE,
     driver_id UUID NOT NULL REFERENCES drivers(driver_id) ON DELETE RESTRICT,
-    issued_by UUID NOT NULL REFERENCES staff_users(user_id) ON DELETE RESTRICT,
+    issued_by UUID REFERENCES staff_users(user_id) ON DELETE RESTRICT,
     notice_type VARCHAR(30) NOT NULL CHECK (notice_type IN ('fine_notice', 'payment_reminder', 'overdue_notice', 'dispute_notice')),
     event_ref VARCHAR(80) NOT NULL,
     subject VARCHAR(200) NOT NULL,
@@ -201,6 +201,14 @@ CREATE TABLE notices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (violation_id, notice_type, event_ref)
 );
+
+CREATE UNIQUE INDEX ux_active_allocation_slot
+ON allocations (slot_id)
+WHERE status = 'active';
+
+CREATE UNIQUE INDEX ux_active_allocation_vehicle
+ON allocations (vehicle_id)
+WHERE status = 'active';
 
 CREATE TABLE audit_outbox (
     outbox_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
