@@ -166,14 +166,65 @@ CREATE TABLE payments (
     payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     driver_id UUID NOT NULL REFERENCES drivers(driver_id) ON DELETE RESTRICT,
     vehicle_id UUID REFERENCES vehicles(vehicle_id) ON DELETE SET NULL,
+    allocation_id UUID REFERENCES allocations(allocation_id) ON DELETE RESTRICT,
+    payment_category VARCHAR(20) NOT NULL DEFAULT 'violation_fine'
+        CHECK (payment_category IN ('violation_fine', 'parking_fee')),
     payment_method VARCHAR(30) NOT NULL CHECK (payment_method IN ('cash', 'card', 'upi', 'bank_transfer', 'wallet')),
     amount NUMERIC(10, 2) NOT NULL CHECK (amount >= 0),
     payment_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'success', 'failed', 'refunded', 'cancelled')),
     transaction_reference VARCHAR(80) UNIQUE,
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT payments_category_allocation_check CHECK (
+        (payment_category = 'parking_fee' AND allocation_id IS NOT NULL)
+        OR (payment_category = 'violation_fine' AND allocation_id IS NULL)
+    )
 );
+
+CREATE OR REPLACE FUNCTION validate_parking_payment_amount()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_allocation allocations%ROWTYPE;
+    v_paid NUMERIC(10,2);
+BEGIN
+    IF NEW.payment_category <> 'parking_fee' OR NEW.payment_status <> 'success' THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT * INTO v_allocation
+      FROM allocations
+     WHERE allocation_id = NEW.allocation_id
+     FOR UPDATE;
+
+    IF NOT FOUND OR v_allocation.status <> 'checked_out' THEN
+        RAISE EXCEPTION 'Parking fees can only be paid for a checked-out allocation.';
+    END IF;
+
+    IF NEW.amount <= 0 THEN
+        RAISE EXCEPTION 'Parking-fee payment amount must be greater than zero.';
+    END IF;
+
+    SELECT COALESCE(SUM(amount), 0)
+      INTO v_paid
+      FROM payments
+     WHERE allocation_id = NEW.allocation_id
+       AND payment_category = 'parking_fee'
+       AND payment_status = 'success'
+       AND payment_id <> COALESCE(NEW.payment_id, '00000000-0000-0000-0000-000000000000'::uuid);
+
+    IF v_paid + NEW.amount > v_allocation.total_fee THEN
+        RAISE EXCEPTION 'Parking-fee payments cannot exceed the allocation total.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validate_parking_payment_amount
+BEFORE INSERT OR UPDATE OF allocation_id, payment_category, amount, payment_status
+ON payments
+FOR EACH ROW EXECUTE FUNCTION validate_parking_payment_amount();
 
 CREATE TABLE violation_payments (
     violation_payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -188,7 +239,7 @@ CREATE TABLE notices (
     notice_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     violation_id UUID REFERENCES violations(violation_id) ON DELETE CASCADE,
     driver_id UUID NOT NULL REFERENCES drivers(driver_id) ON DELETE RESTRICT,
-    issued_by UUID NOT NULL REFERENCES staff_users(user_id) ON DELETE RESTRICT,
+    issued_by UUID REFERENCES staff_users(user_id) ON DELETE RESTRICT,
     notice_type VARCHAR(30) NOT NULL CHECK (notice_type IN ('fine_notice', 'payment_reminder', 'overdue_notice', 'dispute_notice')),
     event_ref VARCHAR(80) NOT NULL,
     subject VARCHAR(200) NOT NULL,
@@ -201,6 +252,14 @@ CREATE TABLE notices (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (violation_id, notice_type, event_ref)
 );
+
+CREATE UNIQUE INDEX ux_active_allocation_slot
+ON allocations (slot_id)
+WHERE status = 'active';
+
+CREATE UNIQUE INDEX ux_active_allocation_vehicle
+ON allocations (vehicle_id)
+WHERE status = 'active';
 
 CREATE TABLE audit_outbox (
     outbox_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -261,6 +320,41 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_set_updated_at_notices
 BEFORE UPDATE ON notices
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE OR REPLACE FUNCTION sync_notices_after_violation_payment()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'paid' AND OLD.status <> 'paid' THEN
+        WITH changed_notices AS (
+            UPDATE notices
+               SET status = 'paid',
+                   updated_at = NOW()
+             WHERE violation_id = NEW.violation_id
+               AND status IN ('sent', 'viewed')
+            RETURNING notice_id, driver_id
+        )
+        INSERT INTO audit_outbox (
+            aggregate_type, aggregate_id, event_type, payload
+        )
+        SELECT 'notices', notice_id, 'notice_paid',
+               jsonb_build_object(
+                   'notice_id', notice_id,
+                   'violation_id', NEW.violation_id,
+                   'driver_id', driver_id,
+                   'actor_type', 'system',
+                   'actor_id', 'payment-settlement',
+                   'summary', 'Fine notice marked paid after violation settlement'
+               )
+          FROM changed_notices;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_paid_violation_notices
+AFTER UPDATE OF status ON violations
+FOR EACH ROW EXECUTE FUNCTION sync_notices_after_violation_payment();
 
 -- ============================================================
 -- Rule: only one active allocation per slot and vehicle
@@ -329,6 +423,14 @@ BEGIN
         RAISE EXCEPTION 'Payment % does not exist.', NEW.payment_id;
     END IF;
 
+    IF v_payment.payment_category <> 'violation_fine' THEN
+        RAISE EXCEPTION 'Parking-fee payments cannot be applied to violations.';
+    END IF;
+
+    IF v_payment.payment_status IN ('failed', 'refunded', 'cancelled') THEN
+        RAISE EXCEPTION 'Only pending or successful payments can be applied to a violation.';
+    END IF;
+
     SELECT COALESCE(SUM(amount_applied), 0)
       INTO v_total_applied_for_violation
       FROM violation_payments
@@ -392,12 +494,16 @@ BEGIN
         RAISE EXCEPTION 'A violation can only be created for an ACTIVE allocation.';
     END IF;
 
+    IF p_description IS NULL OR btrim(p_description) = '' THEN
+        RAISE EXCEPTION 'Violation description must not be empty.';
+    END IF;
+
     SELECT * INTO v_violation_type
     FROM violation_types
     WHERE violation_type_id = p_violation_type_id;
 
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Violation type % not found.', p_violation_type_id;
+    IF NOT FOUND OR NOT v_violation_type.is_active THEN
+        RAISE EXCEPTION 'Violation type % does not exist or is inactive.', p_violation_type_id;
     END IF;
 
     v_violation_number := 'V-' || to_char(NOW(), 'YYYYMMDDHH24MISS') || '-' || floor(random() * 100000)::int;
@@ -489,8 +595,12 @@ BEGIN
         RAISE EXCEPTION 'Payment % not found.', p_payment_id;
     END IF;
 
-    IF v_payment.payment_status = 'failed' THEN
-        RAISE EXCEPTION 'Cannot apply a failed payment to a violation.';
+    IF v_payment.payment_category <> 'violation_fine' THEN
+        RAISE EXCEPTION 'Parking-fee payments cannot be applied to violations.';
+    END IF;
+
+    IF v_payment.payment_status IN ('failed', 'refunded', 'cancelled', 'success') THEN
+        RAISE EXCEPTION 'This payment is not available for further violation applications.';
     END IF;
 
     SELECT COALESCE(SUM(amount_applied), 0)
@@ -528,6 +638,7 @@ BEGIN
                resolved_at = NOW(),
                updated_at = NOW()
          WHERE violation_id = p_violation_id;
+
     ELSE
         UPDATE violations
            SET status = 'pending_payment',
@@ -595,21 +706,14 @@ BEGIN
         RAISE EXCEPTION 'Violation % not found.', p_violation_id;
     END IF;
 
-    IF EXISTS (
-        SELECT 1
-        FROM notices
-        WHERE violation_id = p_violation_id
-          AND notice_type = p_notice_type
-          AND event_ref = p_event_ref
-    ) THEN
-        SELECT notice_id INTO v_notice_id
-        FROM notices
-        WHERE violation_id = p_violation_id
-          AND notice_type = p_notice_type
-          AND event_ref = p_event_ref
-        LIMIT 1;
-
-        RETURN v_notice_id;
+    IF p_notice_type NOT IN ('fine_notice', 'payment_reminder', 'overdue_notice', 'dispute_notice')
+       OR p_event_ref IS NULL
+       OR btrim(p_event_ref) = ''
+       OR p_subject IS NULL
+       OR btrim(p_subject) = ''
+       OR p_message IS NULL
+       OR btrim(p_message) = '' THEN
+        RAISE EXCEPTION 'Notice type, event reference, subject, and message must be valid.';
     END IF;
 
     INSERT INTO notices (
@@ -622,7 +726,8 @@ BEGIN
         message,
         status,
         issued_at,
-        due_date
+        due_date,
+        sent_at
     ) VALUES (
         v_violation.violation_id,
         v_violation.driver_id,
@@ -633,9 +738,20 @@ BEGIN
         p_message,
         'sent',
         NOW(),
-        NOW() + INTERVAL '7 days'
+        NOW() + INTERVAL '7 days',
+        NOW()
     )
+    ON CONFLICT (violation_id, notice_type, event_ref) DO NOTHING
     RETURNING notice_id INTO v_notice_id;
+
+    IF v_notice_id IS NULL THEN
+        SELECT notice_id INTO v_notice_id
+          FROM notices
+         WHERE violation_id = p_violation_id
+           AND notice_type = p_notice_type
+           AND event_ref = p_event_ref;
+        RETURN v_notice_id;
+    END IF;
 
     INSERT INTO audit_outbox (
         aggregate_type,
@@ -699,6 +815,9 @@ ON violations(violation_type_id);
 
 CREATE INDEX idx_payments_driver_status
 ON payments(driver_id, payment_status, created_at);
+
+CREATE INDEX idx_payments_allocation_category
+ON payments(allocation_id, payment_category, payment_status);
 
 CREATE INDEX idx_violation_payments_violation
 ON violation_payments(violation_id);

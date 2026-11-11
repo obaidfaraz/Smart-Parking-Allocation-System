@@ -560,12 +560,10 @@ Example:
 
 ```env
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/smart_parking
-
 MONGODB_URI=mongodb://localhost:27017
-
-MONGODB_DB=smart_parking_logs
-
-JWT_SECRET=YOUR_LONG_RANDOM_SECRET
+MONGODB_DATABASE=smart_parking_audit
+JWT_SECRET=replace-with-at-least-32-random-characters
+DATABASE_SSL=false
 ```
 
 An `.env.example` file containing placeholders should be committed to GitHub.
@@ -606,11 +604,28 @@ Create the project database:
 CREATE DATABASE smart_parking;
 ```
 
-The database schema and sample data will be loaded using the project's SQL scripts once they are implemented.
+From the project root, apply the schema, idempotent database features, and optional sample records in this order:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/advanced_features.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seed.sql
+```
+
+In PowerShell, copy `.env.example` to `.env.local`, configure `DATABASE_URL`, `JWT_SECRET`, `MONGODB_URI`, and `MONGODB_DATABASE`, and then run the same `psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f <script>` command for each file above. Use the same `DATABASE_URL` in the application. Start the app and visit `/setup` to create the first administrator; setup is disabled as soon as the first staff account exists.
+
+Run the rollback-safe SQL smoke checks with:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_a_smoke.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_b_smoke.sql
+```
 
 ### Step 5: Start MongoDB
 
-Ensure MongoDB Community Server is running locally, or configure the connection string for the team's selected MongoDB deployment.
+MongoDB stores audit-log copies and must be running/configured when using **Enforcement → Audit outbox**. PostgreSQL remains the source of truth; parking, allocation, authentication and dashboard routes do not require MongoDB.
+
+The authenticated `/enforcement` page contains the violations, payments, notices, and admin audit-outbox interfaces. Payment entry records staff-confirmed transactions; no external payment gateway is connected. Admins can dispatch pending audit events from the outbox interface.
 
 ### Step 6: Run the Application
 
@@ -630,7 +645,7 @@ npm run start
 npm run lint
 ```
 
-The application requires both database services to be available for full functionality.
+Member A's application flows require PostgreSQL. MongoDB will be required once Member B's audit-log integration is merged.
 
 ---
 
@@ -837,20 +852,32 @@ AI-generated code must be reviewed, understood, tested and integrated by the tea
 
 This repository is the central development location for the Smart Parking Allocation & Violation Management System.
 
-The initial Next.js application has been initialized and pushed to GitHub.
+### Implemented in this workspace — Member A and shared foundation
 
-The remaining implementation work includes:
+- PostgreSQL connection pooling, initial administrator setup, hashed passwords and signed HTTP-only sessions.
+- Server-side role checks (`admin` and `parking_staff`), Zod request validation and parameterized queries.
+- Parking area and slot management, including capacity checks and occupancy display.
+- Driver, vehicle and historical driver-vehicle association management.
+- Transactional check-in/check-out, slot locking, event history and automatic fee calculation.
+- PostgreSQL occupancy view, allocation integrity features, seed data, query examples and a rollback-safe SQL smoke test.
+- Responsive operations dashboard and setup/login screens.
 
-- Database setup and schema implementation.
-- MongoDB integration.
-- Backend API development.
-- Frontend feature implementation.
-- Authentication and authorization.
-- Advanced DBMS features.
-- Testing and documentation.
-- Final integration and demonstration.
+### Remaining team work
 
-**Project status:** In Development
+- Shared end-to-end testing against the team's PostgreSQL and MongoDB installations.
+- Final ER-diagram and submission screenshots, and verification of each member's contribution history.
+
+### Implemented Member B scope
+
+- Authenticated violation-type, violation, payment and notice APIs with Zod validation and parameterized PostgreSQL queries.
+- Active-allocation-only violation issuance with automatic fine notice creation in the same transaction.
+- Violation fine payments that can settle multiple violations for one driver, plus parking-fee payments linked to checked-out allocations.
+- PostgreSQL constraints/triggers for payment limits and notice status synchronization.
+- An `/enforcement` interface for violations, payments, notices and audit-outbox administration.
+- MongoDB `audit_logs` delivery through an idempotent, retryable PostgreSQL outbox dispatcher.
+- Transactional Member B SQL smoke tests and documented API/browser test cases.
+
+**Project status:** Both member modules are implemented locally. Run the documented PostgreSQL/MongoDB end-to-end checks and review/merge the integration PR before treating the work as released on `main`.
 
 ---
 
