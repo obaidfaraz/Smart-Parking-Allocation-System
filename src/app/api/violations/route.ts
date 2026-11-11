@@ -27,8 +27,9 @@ export const GET = withApiErrors(async (request) => {
             ps.slot_number, pa.name AS area_name, ve.license_plate,
             d.first_name || ' ' || d.last_name AS driver_name,
             paid.amount_paid,
-            GREATEST(v.fine_amount - paid.amount_paid, 0)::NUMERIC(10,2)
-              AS outstanding_amount
+            (CASE WHEN v.status = 'waived' THEN 0
+                  ELSE GREATEST(v.fine_amount - paid.amount_paid, 0)
+             END)::NUMERIC(10,2) AS outstanding_amount
        FROM violations v
        JOIN violation_types vt ON vt.violation_type_id = v.violation_type_id
        JOIN parking_slots ps ON ps.slot_id = v.slot_id
