@@ -886,3 +886,19 @@ This repository is the central development location for the Smart Parking Alloca
 Developed as part of the DBMS Experiential Learning – Level 3 Project at PES University, Bengaluru.
 
 **Team:** Syed Obaid Faraz and Suryatej V.
+
+
+### Database report and design evidence
+
+- [Architecture and advanced DBMS evidence](docs/architecture.md)
+- [Data dictionary](docs/data-dictionary.md)
+- [Rendered ER diagrams and editable sources](docs/diagrams/README.md)
+- [Test cases and local validation record](docs/test-cases.md)
+- `database/queries.sql`: six report queries, including active areas above 50% of configured capacity using `GROUP BY` / `HAVING`.
+- `database/tests/occupancy_report.sql`: transactional boundary tests for that report.
+
+Run the report test after schema and advanced features are applied:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/occupancy_report.sql
+```
