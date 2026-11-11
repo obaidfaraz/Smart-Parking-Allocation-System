@@ -902,3 +902,7 @@ Run the report test after schema and advanced features are applied:
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/occupancy_report.sql
 ```
+
+### Application screenshots
+
+See the [screenshot gallery](docs/screenshots/README.md) for the dashboard, parking/driver/vehicle/allocation screens, enforcement flows and MongoDB audit reads. Captured from a production build with only the repository's synthetic demo data and real local PostgreSQL/MongoDB; no credentials are shown.
