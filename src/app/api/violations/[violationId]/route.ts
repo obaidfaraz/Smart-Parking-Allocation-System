@@ -49,7 +49,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         `UPDATE violations
             SET status = $2,
                 resolved_at = CASE
-                  WHEN $2 IN ('waived', 'closed') THEN NOW()
+                  WHEN $2::varchar IN ('waived', 'closed') THEN NOW()
                   ELSE resolved_at
                 END
           WHERE violation_id = $1`,
