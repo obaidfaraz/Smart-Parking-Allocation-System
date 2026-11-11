@@ -623,9 +623,9 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_b_smoke.sql
 
 ### Step 5: Start MongoDB
 
-MongoDB stores audit-log copies and must be running/configured when using **Enforcement → Audit outbox**. PostgreSQL remains the source of truth; parking, allocation, authentication and dashboard routes do not require MongoDB.
+MongoDB stores audit-log copies and must be running/configured when using **Enforcement → Audit outbox** or **Enforcement → Audit logs**. PostgreSQL remains the source of truth; parking, allocation, authentication and dashboard routes do not require MongoDB.
 
-The authenticated `/enforcement` page contains the violations, payments, notices, and admin audit-outbox interfaces. Payment entry records staff-confirmed transactions; no external payment gateway is connected. Admins can dispatch pending audit events from the outbox interface.
+The authenticated `/enforcement` page contains the violations, payments, notices, and admin audit interfaces. Payment entry records staff-confirmed transactions; no external payment gateway is connected. Admins can dispatch pending audit events from the Audit outbox tab and read the stored MongoDB documents from the read-only Audit logs tab (`GET /api/audit/logs`, admin-only, with event/entity/actor/date filters, sort order and a bounded limit).
 
 ### Step 6: Run the Application
 
@@ -645,7 +645,7 @@ npm run start
 npm run lint
 ```
 
-Member A's application flows require PostgreSQL. MongoDB will be required once Member B's audit-log integration is merged.
+Member A's application flows require PostgreSQL only. MongoDB is required for Member B's audit-outbox dispatch and audit-log reads.
 
 ---
 
@@ -875,6 +875,7 @@ This repository is the central development location for the Smart Parking Alloca
 - PostgreSQL constraints/triggers for payment limits and notice status synchronization.
 - An `/enforcement` interface for violations, payments, notices and audit-outbox administration.
 - MongoDB `audit_logs` delivery through an idempotent, retryable PostgreSQL outbox dispatcher.
+- Read-only MongoDB audit-log retrieval (`GET /api/audit/logs`, admin-only) with an Audit logs tab in `/enforcement`.
 - Transactional Member B SQL smoke tests and documented API/browser test cases.
 
 **Project status:** Both member modules are implemented locally. Run the documented PostgreSQL/MongoDB end-to-end checks and review/merge the integration PR before treating the work as released on `main`.
