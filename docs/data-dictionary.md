@@ -27,3 +27,27 @@ The canonical definitions and constraints are in `database/schema.sql`. UUID val
 `allocations.total_fee` is zero until check-out. Completed parking revenue is calculated from checked-out allocation records, not from violation payments.
 
 The `payments` category/`allocation_id` relationship and its parking-fee trigger are added by `database/advanced_features.sql` for existing installations as well as fresh schema installs.
+
+## Keys and lifecycle details
+
+- `driver_vehicles.driver_vehicle_id` is the historical assignment key. `UNIQUE(driver_id, vehicle_id, assigned_from)` allows a later dated assignment without rewriting old rows.
+- `driver_phones.phone_id` identifies a phone record; a partial unique index permits at most one primary phone per driver. It is added by `advanced_features.sql`.
+- `allocations` has partial unique indexes on `slot_id` and `vehicle_id` for `status = 'active'`; historical sessions can reuse both.
+- `payments.allocation_id` is required for `parking_fee` and NULL for `violation_fine`. `vehicle_id` is nullable. Payment methods describe staff-entered records, not gateway settlement.
+- `violation_payments` is the link table for many-to-many settlement, unique on `(violation_id, payment_id)`. Amounts are positive and bounded by trigger checks under locks.
+- `notices.violation_id` and `issued_by` are nullable in the schema; `driver_id` is required. Deleting a violation cascades to its notices, while deleting referenced staff is restricted.
+- `occupancy_snapshot.allocation_id` is nullable and becomes NULL when its allocation is deleted. It is not the live occupancy source.
+- `audit_outbox.aggregate_id` is a logical business identifier, not a foreign key. MongoDB `audit_logs.audit_id` is a unique copy of the outbox UUID; no cross-database foreign key exists.
+
+## MongoDB audit document
+
+| Field | Type / meaning |
+|---|---|
+| `audit_id` | String UUID copied from PostgreSQL outbox; unique index |
+| `event_type`, `entity_type`, `entity_id` | Event name and logical business record reference |
+| `actor_type`, `actor_id` | Actor metadata from the event payload, or system/database defaults |
+| `occurred_at` | BSON date derived from outbox creation time |
+| `payload` | Flexible business-event object; PostgreSQL stores the originating JSONB |
+| `summary` | Human-readable event description |
+
+`GET /api/audit/logs` deliberately omits `payload` and MongoDB `_id`. The diagram treats Mongo delivery as a logical copy, not a relational association. Field definitions in SQL and `src/lib/mongodb.ts` take precedence over this abbreviated dictionary.
