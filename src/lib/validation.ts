@@ -147,4 +147,18 @@ export const noticeStatusSchema = z.object({
   status: z.enum(["sent", "viewed", "paid", "expired", "cancelled"]),
 });
 
+export const auditLogQuerySchema = z.object({
+  eventType: z.string().trim().min(1).max(80).optional(),
+  entityType: z.string().trim().min(1).max(80).optional(),
+  actorType: z.string().trim().min(1).max(40).optional(),
+  entityId: z.string().trim().min(1).max(80).optional(),
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  order: z.enum(["asc", "desc"]).default("desc"),
+}).refine((input) => !input.from || !input.to || input.from <= input.to, {
+  message: "from must not be after to.",
+  path: ["to"],
+});
+
 export const uuidSchema = uuid;
