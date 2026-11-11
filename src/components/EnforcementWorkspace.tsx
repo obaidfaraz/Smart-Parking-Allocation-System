@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type ModuleTab = "violations" | "payments" | "notices" | "audit";
+type ModuleTab = "violations" | "payments" | "notices" | "audit" | "auditLogs";
 
 interface ApiFailure {
   error?: string;
@@ -91,6 +91,17 @@ interface OutboxEvent {
   error_message: string | null;
 }
 
+interface AuditLogEntry {
+  audit_id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  actor_type: string;
+  actor_id: string;
+  occurred_at: string;
+  summary: string;
+}
+
 class RequestError extends Error {
   constructor(
     message: string,
@@ -130,6 +141,7 @@ const tabs: { id: ModuleTab; label: string }[] = [
   { id: "payments", label: "Payments" },
   { id: "notices", label: "Notices" },
   { id: "audit", label: "Audit outbox" },
+  { id: "auditLogs", label: "Audit logs" },
 ];
 
 export default function EnforcementWorkspace() {
@@ -144,6 +156,11 @@ export default function EnforcementWorkspace() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [outbox, setOutbox] = useState<OutboxEvent[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditReadError, setAuditReadError] = useState("");
+  const [auditEventTypes, setAuditEventTypes] = useState<string[]>([]);
+  const [auditEntityTypes, setAuditEntityTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -223,6 +240,64 @@ export default function EnforcementWorkspace() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [loadData]);
+
+  const loadAuditLogs = useCallback(
+    async (params?: {
+      eventType?: string;
+      entityType?: string;
+      limit?: string;
+      order?: string;
+    }) => {
+      setError("");
+      setAuditReadError("");
+      setAuditLoading(true);
+      try {
+        const search = new URLSearchParams();
+        if (params?.eventType) {
+          search.set("eventType", params.eventType);
+        }
+        if (params?.entityType) {
+          search.set("entityType", params.entityType);
+        }
+        if (params?.limit) {
+          search.set("limit", params.limit);
+        }
+        if (params?.order) {
+          search.set("order", params.order);
+        }
+        const suffix = search.toString();
+        const result = await requestJson<{
+          logs: AuditLogEntry[];
+          eventTypes: string[];
+          entityTypes: string[];
+        }>(`/api/audit/logs${suffix ? `?${suffix}` : ""}`);
+        setAuditLogs(result.logs);
+        setAuditEventTypes(result.eventTypes);
+        setAuditEntityTypes(result.entityTypes);
+      } catch (requestError) {
+        setAuditLogs([]);
+        setAuditReadError("Audit logs could not be loaded.");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Could not load audit logs.",
+        );
+      } finally {
+        setAuditLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (activeTab !== "auditLogs" || user?.role !== "admin") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadAuditLogs();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, user?.role, loadAuditLogs]);
 
   const outstandingViolations = useMemo(
     () =>
@@ -415,6 +490,17 @@ export default function EnforcementWorkspace() {
     );
   }
 
+  function applyAuditLogFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void loadAuditLogs({
+      eventType: String(form.get("eventType") ?? "") || undefined,
+      entityType: String(form.get("entityType") ?? "") || undefined,
+      order: String(form.get("order") ?? "") || undefined,
+      limit: String(form.get("limit") ?? "") || undefined,
+    });
+  }
+
   const selectedDriverViolations = outstandingViolations.filter(
     (violation) => violation.driver_id === selectedDriverId,
   );
@@ -468,7 +554,7 @@ export default function EnforcementWorkspace() {
           <Link className="nav-link" href="/">
             <span className="nav-icon">⌂</span> Parking operations
           </Link>
-          {tabs.map((tab) => (
+          {tabs.filter((tab) => (tab.id !== "audit" && tab.id !== "auditLogs") || user?.role === "admin").map((tab) => (
             <button
               className={`nav-link ${activeTab === tab.id ? "active" : ""}`}
               key={tab.id}
@@ -550,7 +636,7 @@ export default function EnforcementWorkspace() {
           </section>
 
           <nav className="enforcement-tabs" aria-label="Enforcement modules">
-            {tabs.filter((tab) => tab.id !== "audit" || user?.role === "admin").map((tab) => (
+            {tabs.filter((tab) => (tab.id !== "audit" && tab.id !== "auditLogs") || user?.role === "admin").map((tab) => (
               <button
                 className={activeTab === tab.id ? "selected" : ""}
                 key={tab.id}
@@ -797,9 +883,69 @@ export default function EnforcementWorkspace() {
             </>
           )}
 
+          {activeTab === "auditLogs" && user?.role === "admin" && (
+            <>
+              <section className="card form-card">
+                <div className="section-title"><div><h3>Read audit logs</h3><p>Queries the MongoDB audit documents written by the outbox dispatcher. Dispatch pending events from the Audit outbox tab first.</p></div></div>
+                <form className="enforcement-form" onSubmit={applyAuditLogFilters}>
+                  <label className="form-field">Event type
+                    <select name="eventType" defaultValue="">
+                      <option value="">All event types</option>
+                      {auditEventTypes.map((eventType) => (
+                        <option key={eventType} value={eventType}>
+                          {eventType.replaceAll("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="form-field">Entity type
+                    <select name="entityType" defaultValue="">
+                      <option value="">All entities</option>
+                      {auditEntityTypes.map((entityType) => (
+                        <option key={entityType} value={entityType}>
+                          {entityType}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="form-field">Order
+                    <select name="order" defaultValue="desc">
+                      <option value="desc">Newest first</option>
+                      <option value="asc">Oldest first</option>
+                    </select>
+                  </label>
+                  <label className="form-field">Limit
+                    <select name="limit" defaultValue="50">
+                      <option value="25">25 events</option>
+                      <option value="50">50 events</option>
+                      <option value="100">100 events</option>
+                      <option value="200">200 events</option>
+                    </select>
+                  </label>
+                  <button className="button primary-button form-actions" disabled={busy || auditLoading} type="submit">{auditLoading ? "Loading logs..." : "Apply filters"}</button>
+                </form>
+              </section>
+              <section className="card table-card">
+                <div className="section-title"><div><h3>Audit log register</h3><p>Read-only view of MongoDB audit documents; full payloads remain in the audit store.</p></div></div>
+                <div className="table-scroll"><table>
+                  <thead><tr><th>Event</th><th>Entity</th><th>Actor</th><th>Occurred</th><th>Summary</th></tr></thead>
+                  <tbody>{auditLogs.map((log) => (
+                    <tr key={log.audit_id}>
+                      <td><strong>{log.event_type.replaceAll("_", " ")}</strong><small>{log.audit_id.slice(0, 8)}</small></td>
+                      <td>{log.entity_type}</td>
+                      <td>{log.actor_type}</td>
+                      <td>{new Date(log.occurred_at).toLocaleString("en-IN")}</td>
+                      <td>{log.summary}</td>
+                    </tr>
+                  ))}{!auditLogs.length && <tr><td colSpan={5} className="empty-state">{auditLoading ? "Loading audit logs..." : auditReadError || "No audit logs match the selected filters."}</td></tr>}</tbody>
+                </table></div>
+              </section>
+            </>
+          )}
+
           <footer className="page-footer">Smart Parking Allocation &amp; Violation Management <span>·</span> Member B enforcement module</footer>
         </div>
       </main>
     </div>
   );
-}
+              }

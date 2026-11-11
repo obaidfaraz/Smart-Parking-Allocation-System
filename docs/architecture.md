@@ -28,6 +28,7 @@ The `/setup` page can create the first administrator only while `staff_users` is
 3. Staff record violation-fine payments. One payment may be split across multiple outstanding violations for the same driver, including that driver's different vehicles. Parking-fee payments instead reference a checked-out allocation and cannot exceed its recorded fee.
 4. Payment settlement updates the violation state and marks sent/viewed notices paid when the violation is fully settled.
 5. Admins dispatch outbox events to MongoDB with `POST /api/audit/dispatch`. The worker locks a bounded batch, upserts audit documents using unique outbox IDs, and marks delivery success/failure in PostgreSQL for safe retries.
+6. Admins read the stored audit documents with `GET /api/audit/logs`. The route is admin-only, validates filters with Zod, returns a bounded payload-free list sorted by occurrence time, and reports a clean `503` when MongoDB is not configured or unreachable.
 
 ## Database script order
 
@@ -41,4 +42,4 @@ Run the scripts from the project root against the same `smart_parking` database:
 
 ## Scope boundary
 
-The application includes Member A's parking/allocation flow and Member B's violation, payment, notice, and MongoDB audit-outbox interfaces. MongoDB is used only for audit documents; PostgreSQL remains the transactional source of truth. Payment entry records staff-confirmed transactions and does not implement a third-party payment gateway.
+The application includes Member A's parking/allocation flow and Member B's violation, payment, notice, and MongoDB audit interfaces (outbox dispatch plus read-only audit-log retrieval). MongoDB is used only for audit documents; PostgreSQL remains the transactional source of truth. Payment entry records staff-confirmed transactions and does not implement a third-party payment gateway.
