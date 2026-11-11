@@ -49,3 +49,39 @@ The test rolls back its fixtures and checks:
 14. Stop MongoDB temporarily and reload the Audit logs tab. Verify a clear unavailable message is shown and the rest of the workspace keeps working; restart MongoDB and confirm the logs load again.
 
 Record the database version, command output and browser screenshots during the final team test run. Tests requiring a running PostgreSQL service cannot be executed by the application build alone.
+
+## Aggregate report regression
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/queries.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/occupancy_report.sql
+```
+
+The regression script creates four temporary fixture areas inside a transaction, executes the above-50% report query, asserts the results and rolls back:
+
+| Fixture | Expected |
+|---|---|
+| Active, configured capacity 4, occupied 3 | Included, 75.00% |
+| Active, configured capacity 4, occupied 2 | Excluded: exactly 50% is not above 50% |
+| Active, configured capacity 4, no installed slots | Excluded; no divide-by-zero |
+| Inactive, configured capacity 4, occupied 3 | Excluded by `WHERE` before grouping |
+
+`HAVING` filters aggregate groups after `WHERE`; capacity is `parking_areas.total_slots`, not the number of installed slots. Keep the regression SELECT aligned with the last query in `queries.sql` when revising the report.
+
+## Additional negative and lifecycle checks
+
+| Check | Expected result |
+|---|---|
+| Signed-out `GET /api/audit/logs` | `401` |
+| Parking-staff `GET /api/audit/logs` | `403`, even if called without the UI |
+| Admin read with `limit=0`, `limit=201`, invalid order or invalid ISO date | `400` |
+| Admin read with `from` after `to` | `400` |
+| Valid limit 2 and ascending/descending order | At most 2 records in the requested chronological order |
+| Filter by a known event/entity | Only matching MongoDB records |
+| Waive an open fine with a reason | Status waived; original fine preserved; row outstanding 0; unpaid KPI excludes it; sent/viewed fine notice cancelled |
+| Close a paid/waived fine | Allowed for admin; invalid transitions return `409` |
+| Record more than a remaining fine or parking charge | Rejected without partially applied payment amounts |
+
+## Validation record (local, 12 November 2026)
+
+Both original SQL smoke tests and the new occupancy-report regression were run against real PostgreSQL. The new report returned no rows for the existing low-occupancy seed/test data, then passed all four controlled boundary fixtures. The fixture transactions rolled back. MongoDB 7.0.14 was used for dispatch/read, filtering, idempotency, outage/recovery and role tests; the merged app production build also passed. These are local checks, not evidence of the user's laptop environment or a multi-client concurrency stress test. Re-run the commands after changing schema or business rules.
