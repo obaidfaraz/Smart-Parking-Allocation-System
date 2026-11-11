@@ -1,0 +1,34 @@
+digraph ER {
+graph [rankdir=LR, bgcolor="white", pad=0.45, nodesep=0.45, ranksep=1.0, splines=polyline, fontname="DejaVu Sans", fontsize=22, labelloc=t, label="Enforcement and settlement - physical ER\nPK = primary key | FK = foreign key | NULL = optional parent\nEach child has one parent (or zero/one if NULL); each parent can have 0..many children."];
+node [shape=plain, fontname="DejaVu Sans", fontsize=12];
+edge [color="#8ca69c", fontcolor="#585254",fontname="DejaVu Sans",fontsize=9,arrowsize=0.7];
+allocations [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>allocations</B></TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR></TABLE>>];
+audit_outbox [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>audit_outbox</B></TD></TR><TR><TD ALIGN="LEFT">outbox_id</TD><TD>PK</TD></TR><TR><TD COLSPAN="2">aggregate_id: logical ID, no FK</TD></TR></TABLE>>];
+drivers [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>drivers</B></TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>PK</TD></TR></TABLE>>];
+notices [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>notices</B></TD></TR><TR><TD ALIGN="LEFT">notice_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">violation_id</TD><TD>FK / NULL</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">issued_by</TD><TD>FK / NULL</TD></TR></TABLE>>];
+parking_slots [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>parking_slots</B></TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">area_id</TD><TD>FK</TD></TR></TABLE>>];
+payments [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>payments</B></TD></TR><TR><TD ALIGN="LEFT">payment_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK / NULL</TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>FK / NULL</TD></TR></TABLE>>];
+staff_users [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>staff_users</B></TD></TR><TR><TD ALIGN="LEFT">user_id</TD><TD>PK</TD></TR></TABLE>>];
+vehicles [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>vehicles</B></TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>PK</TD></TR></TABLE>>];
+violation_payments [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>violation_payments</B></TD></TR><TR><TD ALIGN="LEFT">violation_payment_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">violation_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">payment_id</TD><TD>FK</TD></TR></TABLE>>];
+violation_types [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>violation_types</B></TD></TR><TR><TD ALIGN="LEFT">violation_type_id</TD><TD>PK</TD></TR></TABLE>>];
+violations [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>violations</B></TD></TR><TR><TD ALIGN="LEFT">violation_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">violation_type_id</TD><TD>FK</TD></TR></TABLE>>];
+allocations -> parking_slots [label="slot_id", style=solid];
+allocations -> vehicles [label="vehicle_id", style=solid];
+allocations -> drivers [label="driver_id", style=solid];
+violations -> allocations [label="allocation_id", style=solid];
+violations -> parking_slots [label="slot_id", style=solid];
+violations -> vehicles [label="vehicle_id", style=solid];
+violations -> drivers [label="driver_id", style=solid];
+violations -> violation_types [label="violation_type_id", style=solid];
+payments -> drivers [label="driver_id", style=solid];
+payments -> vehicles [label="vehicle_id", style=dashed];
+payments -> allocations [label="allocation_id", style=dashed];
+violation_payments -> violations [label="violation_id", style=solid];
+violation_payments -> payments [label="payment_id", style=solid];
+notices -> violations [label="violation_id", style=dashed];
+notices -> drivers [label="driver_id", style=solid];
+notices -> staff_users [label="issued_by", style=dashed];
+mongo [shape=box, style="rounded,dashed",label="MongoDB: audit_logs\naudit_id = unique outbox UUID\nlogical copy, no cross-DB FK"];
+audit_outbox -> mongo [style=dashed, label="admin dispatch / idempotent upsert"];
+}
