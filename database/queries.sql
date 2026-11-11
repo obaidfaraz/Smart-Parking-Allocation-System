@@ -61,3 +61,21 @@ LEFT JOIN parking_slots ps ON ps.area_id = pa.area_id
 LEFT JOIN allocations a ON a.slot_id = ps.slot_id
 GROUP BY pa.area_id
 ORDER BY pa.name;
+
+-- Active areas with more than half of their configured capacity occupied.
+-- WHERE filters individual areas; HAVING filters the grouped slot counts.
+-- Compare against total_slots, not installed-slot count, to use declared capacity.
+SELECT
+    pa.area_id,
+    pa.name,
+    pa.total_slots AS configured_capacity,
+    COUNT(ps.slot_id) FILTER (WHERE ps.current_status = 'occupied') AS occupied_slots,
+    ROUND(100.0 * COUNT(ps.slot_id) FILTER (WHERE ps.current_status = 'occupied')
+          / pa.total_slots, 2) AS occupancy_percent
+FROM parking_areas pa
+LEFT JOIN parking_slots ps ON ps.area_id = pa.area_id
+WHERE pa.status = 'active'
+GROUP BY pa.area_id, pa.name, pa.total_slots
+HAVING COUNT(ps.slot_id) FILTER (WHERE ps.current_status = 'occupied')
+       > pa.total_slots * 0.5
+ORDER BY occupancy_percent DESC, pa.name;

@@ -1,0 +1,29 @@
+digraph ER {
+graph [rankdir=LR, bgcolor="white", pad=0.45, nodesep=0.45, ranksep=1.0, splines=polyline, fontname="DejaVu Sans", fontsize=22, labelloc=t, label="Parking and identity - physical ER\nPK = primary key | FK = foreign key | NULL = optional parent\nEach child has one parent (or zero/one if NULL); each parent can have 0..many children."];
+node [shape=plain, fontname="DejaVu Sans", fontsize=12];
+edge [color="#8ca69c", fontcolor="#585254",fontname="DejaVu Sans",fontsize=9,arrowsize=0.7];
+allocations [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>allocations</B></TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR></TABLE>>];
+check_in_out_events [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>check_in_out_events</B></TD></TR><TR><TD ALIGN="LEFT">event_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR></TABLE>>];
+driver_phones [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>driver_phones</B></TD></TR><TR><TD ALIGN="LEFT">phone_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR></TABLE>>];
+driver_vehicles [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>driver_vehicles</B></TD></TR><TR><TD ALIGN="LEFT">driver_vehicle_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>FK</TD></TR></TABLE>>];
+drivers [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>drivers</B></TD></TR><TR><TD ALIGN="LEFT">driver_id</TD><TD>PK</TD></TR></TABLE>>];
+occupancy_snapshot [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>occupancy_snapshot</B></TD></TR><TR><TD ALIGN="LEFT">snapshot_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">area_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>FK</TD></TR><TR><TD ALIGN="LEFT">allocation_id</TD><TD>FK / NULL</TD></TR></TABLE>>];
+parking_areas [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>parking_areas</B></TD></TR><TR><TD ALIGN="LEFT">area_id</TD><TD>PK</TD></TR></TABLE>>];
+parking_slots [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>parking_slots</B></TD></TR><TR><TD ALIGN="LEFT">slot_id</TD><TD>PK</TD></TR><TR><TD ALIGN="LEFT">area_id</TD><TD>FK</TD></TR></TABLE>>];
+staff_users [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>staff_users</B></TD></TR><TR><TD ALIGN="LEFT">user_id</TD><TD>PK</TD></TR></TABLE>>];
+vehicles [label=<<TABLE BORDER="1" COLOR="#c8d8d2" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7"><TR><TD COLSPAN="2" BGCOLOR="#e4f1ec"><B>vehicles</B></TD></TR><TR><TD ALIGN="LEFT">vehicle_id</TD><TD>PK</TD></TR></TABLE>>];
+parking_slots -> parking_areas [label="area_id", style=solid];
+driver_vehicles -> drivers [label="driver_id", style=solid];
+driver_vehicles -> vehicles [label="vehicle_id", style=solid];
+allocations -> parking_slots [label="slot_id", style=solid];
+allocations -> vehicles [label="vehicle_id", style=solid];
+allocations -> drivers [label="driver_id", style=solid];
+check_in_out_events -> allocations [label="allocation_id", style=solid];
+check_in_out_events -> parking_slots [label="slot_id", style=solid];
+check_in_out_events -> vehicles [label="vehicle_id", style=solid];
+check_in_out_events -> drivers [label="driver_id", style=solid];
+occupancy_snapshot -> parking_areas [label="area_id", style=solid];
+occupancy_snapshot -> parking_slots [label="slot_id", style=solid];
+occupancy_snapshot -> allocations [label="allocation_id", style=dashed];
+driver_phones -> drivers [label="driver_id", style=solid];
+}

@@ -48,138 +48,14 @@ The following assumptions are documented explicitly:
 
 ## 4. ER diagram
 
-```mermaid
-erDiagram
-    PARKING_AREAS ||--o{ PARKING_SLOTS : contains
-    PARKING_AREAS ||--o{ OCCUPANCY_SNAPSHOT : tracks
-    PARKING_SLOTS ||--o{ ALLOCATIONS : assigned_to
-    DRIVERS ||--o{ DRIVER_VEHICLES : owns
-    VEHICLES ||--o{ DRIVER_VEHICLES : linked_to
-    DRIVERS ||--o{ ALLOCATIONS : parks
-    VEHICLES ||--o{ ALLOCATIONS : parks
-    ALLOCATIONS ||--o{ CHECK_IN_OUT_EVENTS : logs
-    ALLOCATIONS ||--o{ VIOLATIONS : creates
-    PARKING_SLOTS ||--o{ VIOLATIONS : records
-    DRIVERS ||--o{ VIOLATIONS : receives
-    VEHICLES ||--o{ VIOLATIONS : involved
-    VIOLATION_TYPES ||--o{ VIOLATIONS : classifies
-    VIOLATIONS ||--o{ VIOLATION_PAYMENTS : settled_by
-    PAYMENTS ||--o{ VIOLATION_PAYMENTS : applies_to
-    DRIVERS ||--o{ PAYMENTS : makes
-    VEHICLES ||--o{ PAYMENTS : associated
-    VIOLATIONS ||--o{ NOTICES : triggers
-    DRIVERS ||--o{ NOTICES : receives
-    STAFF_USERS ||--o{ NOTICES : issues
+The rendered diagrams now cover the physical foreign keys, including normalized driver phones, parking-payment allocation references and the audit outbox:
 
-    PARKING_AREAS {
-        uuid area_id PK
-        varchar name
-        varchar code
-    }
+- [Parking and identity diagram](../docs/diagrams/parking-er.svg)
+- [Enforcement and settlement diagram](../docs/diagrams/enforcement-er.svg)
+- [Notation, editable sources and render commands](../docs/diagrams/README.md)
 
-    PARKING_SLOTS {
-        uuid slot_id PK
-        uuid area_id FK
-        varchar slot_number
-        varchar current_status
-    }
+The SQL scripts remain the schema source of truth. Diagram arrows point from a child FK to its referenced parent; nullable references are marked explicitly.
 
-    DRIVERS {
-        uuid driver_id PK
-        varchar email
-        varchar phone
-        varchar license_number
-    }
-
-    VEHICLES {
-        uuid vehicle_id PK
-        varchar license_plate
-        varchar vehicle_type
-    }
-
-    DRIVER_VEHICLES {
-        uuid driver_vehicle_id PK
-        uuid driver_id FK
-        uuid vehicle_id FK
-        boolean is_primary
-        timestamptz assigned_from
-        timestamptz assigned_to
-    }
-
-    ALLOCATIONS {
-        uuid allocation_id PK
-        uuid slot_id FK
-        uuid vehicle_id FK
-        uuid driver_id FK
-        timestamptz check_in_time
-        timestamptz actual_check_out_time
-        varchar status
-    }
-
-    CHECK_IN_OUT_EVENTS {
-        uuid event_id PK
-        uuid allocation_id FK
-        varchar event_type
-        timestamptz event_time
-    }
-
-    OCCUPANCY_SNAPSHOT {
-        uuid snapshot_id PK
-        uuid area_id FK
-        uuid slot_id FK
-        uuid allocation_id FK
-        boolean occupied
-    }
-
-    VIOLATION_TYPES {
-        serial violation_type_id PK
-        varchar name
-        numeric default_fine
-    }
-
-    VIOLATIONS {
-        uuid violation_id PK
-        uuid allocation_id FK
-        uuid slot_id FK
-        uuid vehicle_id FK
-        uuid driver_id FK
-        int violation_type_id FK
-        varchar violation_number
-        varchar status
-        numeric fine_amount
-    }
-
-    PAYMENTS {
-        uuid payment_id PK
-        uuid driver_id FK
-        uuid vehicle_id FK
-        numeric amount
-        varchar payment_status
-    }
-
-    VIOLATION_PAYMENTS {
-        uuid violation_payment_id PK
-        uuid violation_id FK
-        uuid payment_id FK
-        numeric amount_applied
-    }
-
-    NOTICES {
-        uuid notice_id PK
-        uuid violation_id FK
-        uuid driver_id FK
-        uuid issued_by FK
-        varchar notice_type
-        varchar event_ref
-        varchar status
-    }
-
-    STAFF_USERS {
-        uuid user_id PK
-        varchar role
-        varchar email
-    }
-```
 
 ## 5. Table design summary
 
@@ -339,6 +215,8 @@ the PostgreSQL row published. Failures are retained with an error and retry
 count; the endpoint can be invoked again to retry them, up to ten attempts.
 Configure `MONGODB_URI` and `MONGODB_DATABASE` in the server environment.
 
+Admin-only `GET /api/audit/logs` reads the MongoDB collection with validated filters, order and a bounded limit; the Audit logs tab is read-only. See [architecture](../docs/architecture.md) for failure behavior.
+
 ## 11. Indexes and DBMS concepts implemented
 
 The schema includes indexes for:
@@ -389,9 +267,9 @@ Member B's authenticated routes include:
 - `GET/POST /api/violations` (creation requires an active allocation and creates a fine notice atomically)
 - `GET/POST /api/payments` (violation fine payments can apply to multiple violations for one driver; parking fees attach to checked-out allocations)
 - `GET/POST /api/notices` and `PATCH /api/notices/:noticeId`
-- Admin-only `GET /api/audit/outbox` and `POST /api/audit/dispatch`
+- Admin-only `GET /api/audit/outbox`, `POST /api/audit/dispatch` and `GET /api/audit/logs`
 
-`/enforcement` provides the violation, payment, notice, and outbox interfaces.
+`/enforcement` provides the violation, payment, notice, outbox and read-only MongoDB audit-log interfaces.
 The payment API records staff-entered cash/card/UPI/bank-transfer/wallet
 transactions; it is not connected to an external payment gateway. The audit
 dispatcher is an explicit admin-triggered worker endpoint, so production
