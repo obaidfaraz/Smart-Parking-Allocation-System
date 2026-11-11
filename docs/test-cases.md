@@ -45,5 +45,7 @@ The test rolls back its fixtures and checks:
 10. Record a parking payment against a checked-out allocation. Attempt an amount above the remaining fee; it must return `409`.
 11. As an admin, dispatch the audit outbox with MongoDB configured. Verify one document per outbox UUID appears in `audit_logs`; dispatch again and confirm no duplicate audit document is created.
 12. Stop MongoDB temporarily and dispatch again. Verify delivery failure is reported and the outbox row remains retryable; restart MongoDB and retry.
+13. As an admin, open Enforcement → Audit logs after dispatching. Verify each dispatched event appears once with its summary; apply an event-type or entity-type filter and confirm the register narrows to matching documents.
+14. Stop MongoDB temporarily and reload the Audit logs tab. Verify a clear unavailable message is shown and the rest of the workspace keeps working; restart MongoDB and confirm the logs load again.
 
 Record the database version, command output and browser screenshots during the final team test run. Tests requiring a running PostgreSQL service cannot be executed by the application build alone.
