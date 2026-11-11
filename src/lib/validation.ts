@@ -2,6 +2,12 @@ import { z } from "zod";
 
 const uuid = z.string().uuid();
 const nonNegativeMoney = z.coerce.number().finite().min(0).max(1_000_000);
+const positiveMoney = z.coerce
+  .number()
+  .finite()
+  .positive()
+  .max(1_000_000)
+  .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8);
 
 export const loginSchema = z.object({
   email: z.email().max(150).transform((value) => value.trim().toLowerCase()),
@@ -68,6 +74,77 @@ export const allocationSchema = z.object({
   vehicleId: uuid,
   driverId: uuid,
   expectedCheckOutTime: z.iso.datetime().nullable().optional(),
+});
+
+export const violationTypeSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(2000).nullable().optional(),
+  defaultFine: nonNegativeMoney,
+  severity: z.enum(["low", "medium", "high", "critical"]),
+});
+
+export const violationSchema = z.object({
+  allocationId: uuid,
+  violationTypeId: z.coerce.number().int().min(1),
+  description: z.string().trim().min(3).max(2000),
+});
+
+export const violationStatusSchema = z.object({
+  status: z.enum(["disputed", "waived", "closed"]),
+  reason: z.string().trim().min(3).max(1000),
+});
+
+const paymentCommon = {
+  paymentMethod: z.enum(["cash", "card", "upi", "bank_transfer", "wallet"]),
+  transactionReference: z.string().trim().min(1).max(80).nullable().optional(),
+};
+
+export const paymentSchema = z.discriminatedUnion("paymentCategory", [
+  z.object({
+    paymentCategory: z.literal("parking_fee"),
+    allocationId: uuid,
+    amount: positiveMoney,
+    ...paymentCommon,
+  }),
+  z.object({
+    paymentCategory: z.literal("violation_fine"),
+    driverId: uuid,
+    vehicleId: uuid.nullable().optional(),
+    amount: positiveMoney,
+    applications: z
+      .array(
+        z.object({
+          violationId: uuid,
+          amountApplied: positiveMoney,
+        }),
+      )
+      .min(1)
+      .max(50)
+      .refine(
+        (applications) =>
+          new Set(applications.map((application) => application.violationId)).size ===
+          applications.length,
+        "A violation can only appear once per payment.",
+      ),
+    ...paymentCommon,
+  }),
+]);
+
+export const noticeSchema = z.object({
+  violationId: uuid,
+  noticeType: z.enum([
+    "fine_notice",
+    "payment_reminder",
+    "overdue_notice",
+    "dispute_notice",
+  ]),
+  eventRef: z.string().trim().min(1).max(80),
+  subject: z.string().trim().min(2).max(200),
+  message: z.string().trim().min(2).max(5000),
+});
+
+export const noticeStatusSchema = z.object({
+  status: z.enum(["sent", "viewed", "paid", "expired", "cancelled"]),
 });
 
 export const uuidSchema = uuid;

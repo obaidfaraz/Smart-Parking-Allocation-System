@@ -70,6 +70,17 @@ export function withApiErrors(
         );
       }
 
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P0001" &&
+        "message" in error &&
+        typeof error.message === "string"
+      ) {
+        return Response.json({ error: error.message }, { status: 409 });
+      }
+
       console.error("API request failed:", error);
       return Response.json(
         { error: "The request could not be completed." },

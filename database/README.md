@@ -331,6 +331,14 @@ This ensures:
 - business transactions remain consistent with auditing
 - audit events are not silently lost
 
+The Next.js admin interface reads this queue at `/api/audit/outbox` and dispatches
+up to 50 events per request through `POST /api/audit/dispatch`. The dispatcher
+claims rows with `FOR UPDATE SKIP LOCKED`, writes them to the MongoDB
+`audit_logs` collection using the outbox UUID as an idempotency key, then marks
+the PostgreSQL row published. Failures are retained with an error and retry
+count; the endpoint can be invoked again to retry them, up to ten attempts.
+Configure `MONGODB_URI` and `MONGODB_DATABASE` in the server environment.
+
 ## 11. Indexes and DBMS concepts implemented
 
 The schema includes indexes for:
@@ -351,39 +359,44 @@ The schema also demonstrates:
 
 ## 12. Test and execution notes
 
-This schema was reviewed and aligned with the final rules, but it was not executed successfully in this environment because PostgreSQL connection authentication is not available on port 5433.
-
-Expected PostgreSQL testing commands (run once credentials are available):
+Run the schema, hardening features and seed data against a development database,
+then run both transactional SQL smoke tests:
 
 ```bash
-createdb -h localhost -p 5433 -U postgres smart_parking_db_test
-psql -h localhost -p 5433 -U postgres -d smart_parking_db_test -f database/schema.sql
-psql -h localhost -p 5433 -U postgres -d smart_parking_db_test -c "\dt"
-psql -h localhost -p 5433 -U postgres -d smart_parking_db_test -c "SELECT * FROM parking_areas;"
+createdb smart_parking_db_test
+psql smart_parking_db_test -v ON_ERROR_STOP=1 -f database/schema.sql
+psql smart_parking_db_test -v ON_ERROR_STOP=1 -f database/advanced_features.sql
+psql smart_parking_db_test -v ON_ERROR_STOP=1 -f database/seed.sql
+psql smart_parking_db_test -v ON_ERROR_STOP=1 -f database/tests/member_a_smoke.sql
+psql smart_parking_db_test -v ON_ERROR_STOP=1 -f database/tests/member_b_smoke.sql
 ```
 
-## 13. Member A implementation and setup
+The smoke tests run their fixtures inside a transaction and roll them back.
+They require PostgreSQL with `pgcrypto` available; `schema.sql` enables it.
 
-Apply the core schema first, then `advanced_features.sql`, then
-`migrations/002_integrity_hardening.sql`. The advanced script adds the normalized
-`driver_phones` table, authoritative area occupancy view, slot/allocation
-synchronization triggers and `calculate_parking_fee(...)`. `seed.sql` adds
-non-production demonstration areas, drivers and vehicles.
+## 13. Application setup
 
-`tests/member_a_smoke.sql` verifies occupied-slot synchronization, duplicate
-allocation rejection, fee rounding and slot release. It rolls back all fixture
-data when successful. The Next.js dashboard uses the same database objects for
-its occupancy, driver, vehicle and allocation views.
+Set `DATABASE_URL`, a random `JWT_SECRET` of at least 32 bytes, `MONGODB_URI`,
+and `MONGODB_DATABASE` in `.env.local`. Apply `schema.sql`, then
+`advanced_features.sql`, and optionally `seed.sql`. The advanced script adds
+the normalized `driver_phones` table, the area occupancy view, allocation
+synchronization and fee calculation, plus idempotent payment and notice
+integrity features.
 
-## 14. Remaining decisions to confirm
+Member B's authenticated routes include:
 
-These are still project-level decisions that should be confirmed before implementation:
+- `GET/POST /api/violation-types` (creating types is admin-only)
+- `GET/POST /api/violations` (creation requires an active allocation and creates a fine notice atomically)
+- `GET/POST /api/payments` (violation fine payments can apply to multiple violations for one driver; parking fees attach to checked-out allocations)
+- `GET/POST /api/notices` and `PATCH /api/notices/:noticeId`
+- Admin-only `GET /api/audit/outbox` and `POST /api/audit/dispatch`
 
-1. Should the application log each parking-rule event separately, or only the resulting violation/notice?
-2. Should notices be generated automatically for all violations or only for unpaid or overdue violations?
-3. Should a payment be allowed to settle multiple violations across different vehicles or only within the same vehicle context?
-4. Should `trigger` logic be used for any business rules beyond allocation integrity and payment validation?
+`/enforcement` provides the violation, payment, notice, and outbox interfaces.
+The payment API records staff-entered cash/card/UPI/bank-transfer/wallet
+transactions; it is not connected to an external payment gateway. The audit
+dispatcher is an explicit admin-triggered worker endpoint, so production
+deployments should invoke it periodically with an authenticated scheduler.
 
-## 15. Final note
+## 14. Final note
 
 This schema is suitable for a college DBMS mini-project and is designed for a two-person team with clear ownership boundaries. It keeps the project understandable, consistent, and realistic while still demonstrating important database concepts.

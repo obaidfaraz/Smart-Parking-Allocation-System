@@ -10,12 +10,20 @@ The canonical definitions and constraints are in `database/schema.sql`. UUID val
 | `drivers` | Driver identity and license details | Email, phone and license number are unique |
 | `driver_phones` | Normalized driver phone numbers | References a driver; unique phone number; at most one primary number per driver |
 | `vehicles` | Vehicle identity and descriptive details | Unique license plate; year and vehicle type are constrained |
-| `driver_vehicles` | Current and historical driver/vehicle relationships | Supports reassignment; active primary vehicle is limited by the integrity migration |
+| `driver_vehicles` | Current and historical driver/vehicle relationships | Supports reassignment; a driver/vehicle pair can have dated historical assignments |
 | `allocations` | Vehicle check-in, slot assignment, check-out and charge | References one driver, vehicle and slot; only one active allocation per slot/vehicle |
 | `check_in_out_events` | Audit trail for check-in and check-out actions | References allocation, driver, vehicle and slot |
 | `occupancy_snapshot` | Optional historical occupancy observations | References area and slot; stores observation time and counts |
+| `violation_types` | Configurable violation categories and default fines | Severity and non-negative default fine are constrained |
+| `violations` | Fine records linked to parking sessions | Snapshot references to allocation, slot, vehicle and driver; creation is limited to active allocations |
+| `payments` | Staff-recorded parking-fee or violation-fine transactions | Parking payments reference a checked-out allocation; payment category prevents mixing both purposes |
+| `violation_payments` | Applies one violation-fine payment to one or more violations | Amount limits are checked under row locks; one payment may settle multiple fines |
+| `notices` | Fine, reminder, dispute and overdue notice records | Unique event reference prevents duplicate notices; status is independent from violation status |
+| `audit_outbox` | Durable PostgreSQL events pending delivery to MongoDB | Retries and publication state remain in PostgreSQL |
 | `parking_area_occupancy` | Live area capacity and status aggregate | View over parking areas and slots; no duplicate availability flag |
 
-`parking_slots.current_status` is the authoritative availability value. The optional `is_available` compatibility column in the original schema is removed by `002_integrity_hardening.sql`; application code does not read or write it.
+`parking_slots.current_status` is the authoritative availability value. The original `is_available` compatibility column remains in the schema but is not used by application code.
 
 `allocations.total_fee` is zero until check-out. Completed parking revenue is calculated from checked-out allocation records, not from violation payments.
+
+The `payments` category/`allocation_id` relationship and its parking-fee trigger are added by `database/advanced_features.sql` for existing installations as well as fresh schema installs.

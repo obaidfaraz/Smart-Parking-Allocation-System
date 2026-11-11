@@ -58,4 +58,11 @@ AND NOT EXISTS (
       AND dv.status = 'active'
 );
 
+INSERT INTO violation_types (name, description, default_fine, severity)
+VALUES
+    ('Overstay', 'Vehicle remained parked beyond the permitted allocation.', 500.00, 'medium'),
+    ('Unauthorized parking', 'Vehicle occupied a slot without a valid allocation.', 1000.00, 'high'),
+    ('Restricted slot misuse', 'Vehicle used a blocked, reserved, or restricted slot.', 1500.00, 'high')
+ON CONFLICT (name) DO NOTHING;
+
 COMMIT;

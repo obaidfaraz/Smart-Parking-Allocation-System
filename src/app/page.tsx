@@ -615,6 +615,7 @@ export default function Dashboard() {
             key={tab.id}
             type="button"
           ><span className="nav-icon">{tab.icon}</span>{tab.label}{activeTab === tab.id && <span className="nav-marker" />}</button>)}
+          <Link className="nav-link" href="/enforcement"><span className="nav-icon">!</span>Violations &amp; payments</Link>
         </nav>
         <div className="sidebar-bottom">
           <div className="database-status"><span className="status-dot" /><span><strong>Database connected</strong><small>PostgreSQL · live</small></span></div>
