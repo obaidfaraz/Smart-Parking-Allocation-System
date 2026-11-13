@@ -560,10 +560,12 @@ Example:
 
 ```env
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/smart_parking
+
 MONGODB_URI=mongodb://localhost:27017
-MONGODB_DATABASE=smart_parking_audit
-JWT_SECRET=replace-with-at-least-32-random-characters
-DATABASE_SSL=false
+
+MONGODB_DB=smart_parking_logs
+
+JWT_SECRET=YOUR_LONG_RANDOM_SECRET
 ```
 
 An `.env.example` file containing placeholders should be committed to GitHub.
@@ -604,28 +606,11 @@ Create the project database:
 CREATE DATABASE smart_parking;
 ```
 
-From the project root, apply the schema, idempotent database features, and optional sample records in this order:
-
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/schema.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/advanced_features.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seed.sql
-```
-
-In PowerShell, copy `.env.example` to `.env.local`, configure `DATABASE_URL`, `JWT_SECRET`, `MONGODB_URI`, and `MONGODB_DATABASE`, and then run the same `psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f <script>` command for each file above. Use the same `DATABASE_URL` in the application. Start the app and visit `/setup` to create the first administrator; setup is disabled as soon as the first staff account exists.
-
-Run the rollback-safe SQL smoke checks with:
-
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_a_smoke.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/member_b_smoke.sql
-```
+The database schema and sample data will be loaded using the project's SQL scripts once they are implemented.
 
 ### Step 5: Start MongoDB
 
-MongoDB stores audit-log copies and must be running/configured when using **Enforcement → Audit outbox** or **Enforcement → Audit logs**. PostgreSQL remains the source of truth; parking, allocation, authentication and dashboard routes do not require MongoDB.
-
-The authenticated `/enforcement` page contains the violations, payments, notices, and admin audit interfaces. Payment entry records staff-confirmed transactions; no external payment gateway is connected. Admins can dispatch pending audit events from the Audit outbox tab and read the stored MongoDB documents from the read-only Audit logs tab (`GET /api/audit/logs`, admin-only, with event/entity/actor/date filters, sort order and a bounded limit).
+Ensure MongoDB Community Server is running locally, or configure the connection string for the team's selected MongoDB deployment.
 
 ### Step 6: Run the Application
 
@@ -645,7 +630,7 @@ npm run start
 npm run lint
 ```
 
-Member A's application flows require PostgreSQL only. MongoDB is required for Member B's audit-outbox dispatch and audit-log reads.
+The application requires both database services to be available for full functionality.
 
 ---
 
@@ -807,102 +792,8 @@ These are potential future enhancements and are not part of the guaranteed initi
 
 ---
 
-## 19. Development Guidelines for AI Coding Assistants
-
-This repository may be used with GitHub Copilot and other AI coding assistants.
-
-AI assistants must follow these guidelines:
-
-1. Read this README before proposing or implementing changes.
-2. Understand the existing project structure before creating new files.
-3. Respect the responsibilities assigned to Obaid and Suryatej.
-4. Do not modify another member's assigned feature without coordination.
-5. Follow the existing ER diagram and relational schema.
-6. Discuss proposed database schema changes before implementing them.
-7. Use TypeScript and the existing Next.js App Router structure.
-8. Use PostgreSQL for relational records and MongoDB for the agreed audit-log functionality.
-9. Use parameterized SQL queries.
-10. Validate user inputs using Zod or the agreed validation approach.
-11. Keep credentials in environment variables.
-12. Avoid adding unnecessary dependencies.
-13. Do not replace actual database functionality with mock data in completed features.
-14. Explain database queries and advanced DBMS concepts clearly.
-15. Preserve existing files and uncommitted work.
-16. Never run destructive Git commands without explaining their consequences.
-17. Check Git status and fetch the latest remote changes before beginning a new feature.
-18. Provide test instructions and meaningful commit messages for completed work.
-
-### Member-specific AI guidance
-
-**For Syed Obaid Faraz:**
-
-Focus primarily on parking areas, parking slots, drivers, vehicles, allocations, parking availability, the dashboard and allocation-related database operations.
-
-**For Suryatej V:**
-
-Focus primarily on violations, violation payments, parking payments in coordination with Obaid, notices, MongoDB audit logging, related APIs, frontend interfaces, tests and documentation.
-
-Do not assign one member the other's entire feature ownership.
-
-AI-generated code must be reviewed, understood, tested and integrated by the team.
-
----
-
-## 20. Project Status
-
-This repository is the central development location for the Smart Parking Allocation & Violation Management System.
-
-### Implemented in this workspace — Member A and shared foundation
-
-- PostgreSQL connection pooling, initial administrator setup, hashed passwords and signed HTTP-only sessions.
-- Server-side role checks (`admin` and `parking_staff`), Zod request validation and parameterized queries.
-- Parking area and slot management, including capacity checks and occupancy display.
-- Driver, vehicle and historical driver-vehicle association management.
-- Transactional check-in/check-out, slot locking, event history and automatic fee calculation.
-- PostgreSQL occupancy view, allocation integrity features, seed data, query examples and a rollback-safe SQL smoke test.
-- Responsive operations dashboard and setup/login screens.
-
-### Remaining team work
-
-- Shared end-to-end testing against the team's PostgreSQL and MongoDB installations.
-- Final ER-diagram and submission screenshots, and verification of each member's contribution history.
-
-### Implemented Member B scope
-
-- Authenticated violation-type, violation, payment and notice APIs with Zod validation and parameterized PostgreSQL queries.
-- Active-allocation-only violation issuance with automatic fine notice creation in the same transaction.
-- Violation fine payments that can settle multiple violations for one driver, plus parking-fee payments linked to checked-out allocations.
-- PostgreSQL constraints/triggers for payment limits and notice status synchronization.
-- An `/enforcement` interface for violations, payments, notices and audit-outbox administration.
-- MongoDB `audit_logs` delivery through an idempotent, retryable PostgreSQL outbox dispatcher.
-- Read-only MongoDB audit-log retrieval (`GET /api/audit/logs`, admin-only) with an Audit logs tab in `/enforcement`.
-- Transactional Member B SQL smoke tests and documented API/browser test cases.
-
-**Project status:** Both member modules are implemented locally. Run the documented PostgreSQL/MongoDB end-to-end checks and review/merge the integration PR before treating the work as released on `main`.
-
----
 
 **Smart Parking Allocation & Violation Management System**  
 Developed as part of the DBMS Experiential Learning – Level 3 Project at PES University, Bengaluru.
 
 **Team:** Syed Obaid Faraz and Suryatej V.
-
-
-### Database report and design evidence
-
-- [Architecture and advanced DBMS evidence](docs/architecture.md)
-- [Data dictionary](docs/data-dictionary.md)
-- [Rendered ER diagrams and editable sources](docs/diagrams/README.md)
-- [Test cases and local validation record](docs/test-cases.md)
-- `database/queries.sql`: six report queries, including active areas above 50% of configured capacity using `GROUP BY` / `HAVING`.
-- `database/tests/occupancy_report.sql`: transactional boundary tests for that report.
-
-Run the report test after schema and advanced features are applied:
-
-```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/occupancy_report.sql
-```
-
-### Application screenshots
-
-See the [screenshot gallery](docs/screenshots/README.md) for the dashboard, parking/driver/vehicle/allocation screens, enforcement flows and MongoDB audit reads. Captured from a production build with only the repository's synthetic demo data and real local PostgreSQL/MongoDB; no credentials are shown.
